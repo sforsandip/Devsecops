@@ -121,8 +121,8 @@ EOF
 }
 
 resource "aws_instance" "web" {
-  ami             = "ami-0f00d706c4a80fd93"
-  instance_type   = "t2.medium" 
+  ami             = "ami-0eb38b817b93460ac"
+  instance_type   = "c7i-flex.large" 
   key_name        = var.key_name
   iam_instance_profile = "${aws_iam_instance_profile.test_profile.name}"
   security_groups = [aws_security_group.jenkins_sg.name]
