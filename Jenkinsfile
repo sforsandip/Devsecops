@@ -42,7 +42,7 @@ pipeline {
       // Generate fresh kubeconfig that contains a valid IAM token
             sh '''
               aws eks update-kubeconfig \
-                --name kubernetes-cluster \
+                --name kubernetes-cluster-v2 \
                 --region us-east-1
             '''
 
