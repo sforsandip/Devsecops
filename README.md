@@ -1,202 +1,228 @@
-<<<<<<< HEAD
-# AWS Infrastructure Creation using Terraform by A Security Guru
+# 🔐 DevSecOps Pipeline — Secure CI/CD with Automated Security Testing
 
-Helpful Terraform Links:
-- [Terraform Language Documentation](https://www.terraform.io/docs/language/index.html)
-- [Resource: aws_security_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group)
-- [Resource: aws_instance](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/instance)
+A production-grade **DevSecOps** project demonstrating how security is integrated at every stage of the CI/CD pipeline — from static code analysis to live vulnerability scanning — using a deliberately vulnerable Java web application (EasyBuggy) as the target.
 
-## Step 0: Initialize Terraform
+> **"Shift Left Security"** — Security checks run automatically on every commit, catching vulnerabilities before they reach production.
+
+---
+
+## 🏗️ Architecture Overview
+
 ```
+Developer Push (GitHub)
+        ↓
+  Jenkins CI/CD Pipeline (AWS EC2 - Amazon Linux 2023)
+        ↓
+  ┌─────────────────────────────────────────────────────────┐
+  │  SAST: SonarCloud Analysis (code quality + security)    │
+  │  SCA:  Snyk Test (dependency vulnerability scanning)    │
+  └─────────────────────────────────────────────────────────┘
+        ↓
+  Docker Build → Push to AWS ECR
+        ↓
+  Kubernetes Deployment → AWS EKS (namespace: devsecops)
+        ↓
+  ┌─────────────────────────────────────────────────────────┐
+  │  DAST: OWASP ZAP (live application vulnerability scan)  │
+  │  ZAP Report archived as Jenkins build artifact          │
+  └─────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🛡️ Security Testing Layers
+
+This pipeline implements three distinct layers of automated security testing:
+
+| Layer | Tool | Type | What It Catches |
+|---|---|---|---|
+| **SAST** | SonarCloud | Static Analysis | Code vulnerabilities, SQL injection patterns, insecure code |
+| **SCA** | Snyk | Dependency Scan | Vulnerable libraries, outdated packages, CVEs |
+| **DAST** | OWASP ZAP | Dynamic Analysis | XSS, CSRF, injection flaws in the running app |
+
+---
+
+## 🛠️ Full Tech Stack
+
+| Category | Tool |
+|---|---|
+| Application | Java (Maven), EasyBuggy vulnerable web app |
+| CI/CD | Jenkins (Declarative Pipeline) |
+| SAST | SonarCloud |
+| SCA | Snyk |
+| DAST | OWASP ZAP |
+| Containerization | Docker |
+| Container Registry | AWS ECR |
+| Infrastructure as Code | Terraform |
+| Orchestration | Kubernetes (AWS EKS) |
+| Cloud | AWS (EC2, EKS, ECR, IAM) |
+| OS | Amazon Linux 2023 |
+
+---
+
+## 🚀 CI/CD Pipeline Stages
+
+The Jenkins pipeline (`Jenkinsfile`) runs the following stages automatically on every push:
+
+### Stage 1 — SAST: SonarCloud Analysis
+Runs `mvn clean verify sonar:sonar` to perform static application security testing. Catches code smells, bugs, security hotspots, and quality gate violations before any build artifact is created.
+
+### Stage 2 — SCA: Snyk Dependency Scan
+Runs `mvn snyk:test` using the Snyk Maven plugin to scan all third-party dependencies for known CVEs. Uses Jenkins credentials store for secure token management (`Snyk_token`).
+
+### Stage 3 — Docker Build
+Builds the application Docker image using the Dockerfile. Authenticates via Jenkins Docker credentials (`dockerlogin`).
+
+### Stage 4 — Push to AWS ECR
+Tags and pushes the Docker image to AWS Elastic Container Registry (`us-east-1`) using AWS IAM credentials stored in Jenkins.
+
+### Stage 5 — Kubernetes Deployment (EKS)
+Updates kubeconfig for `kubernetes-cluster-2` in `us-east-1`, clears the `devsecops` namespace, and applies `deployment.yaml` to roll out the latest image with a LoadBalancer service.
+
+### Stage 6 — Wait for Deployment
+Waits 180 seconds to allow the application to fully start and become accessible via the EKS LoadBalancer endpoint.
+
+### Stage 7 — DAST: OWASP ZAP Scan
+Performs a live security scan against the running application using OWASP ZAP. Dynamically resolves the LoadBalancer hostname via `kubectl`, runs the scan, and archives `zap_report.html` as a Jenkins build artifact.
+
+---
+
+## ☁️ Infrastructure (Terraform)
+
+`main.tf` provisions the Jenkins server on AWS:
+
+- **EC2 Instance** — `c7i-flex.large`, Amazon Linux 2023, 30GB EBS volume
+- **Security Group** — Opens port `8080` (Jenkins UI) and port `22` (SSH)
+- **IAM Role + Instance Profile** — Grants EC2 instance AWS permissions for ECR, EKS operations
+- **User Data** — Runs `install_jenkins.sh` on launch to auto-install Jenkins
+
+### Provision Infrastructure
+
+```bash
+cd terraform_files
+
+# Initialize Terraform
 terraform init
-```
 
-## Step 1: Plan Resources
-```
+# Preview resources
 terraform plan -var-file="vars/dev-west-2.tfvars"
-```
 
-## Step 2: Apply Resources
-```
+# Create resources
 terraform apply -var-file="vars/dev-west-2.tfvars"
-```
 
-## Step 3: Commands to get the Jenkins admin password via command line
-```
-chmod 400 <keypair>
-ssh -i <keypair> ec2-user@<public_dns>
+# Get Jenkins initial admin password after EC2 is running
+chmod 400 <your-keypair.pem>
+ssh -i <your-keypair.pem> ec2-user@<public-dns>
 sudo cat /var/lib/jenkins/secrets/initialAdminPassword
-```
-## Some Useful Commands
-```
-#To get context information of kubernetes cluster
-cat /home/ec2-user/.kube/config 
 
-#To create namespace in kubernetes cluster
-kubectl create namespace test
-
-#To get deployments in a namespace in kubernetes cluster
-kubectl get deployments --namespace=test 
-
-#To get services in a namespace in kubernetes cluster
-kubectl get svc --namespace=test 
-
-#To delete everything in a namespace in kubernetes cluster
-kubectl delete all --all -n test 
-
-#To delete unused docker images to cleanup memeory on system 
-docker system prune  
-
-#To delete a docker image
-docker image rm imagename  
-
-#To Create EKS cluster
-eksctl create cluster --name kubernetes-cluster --version 1.23 --region us-west-2 --nodegroup-name linux-nodes --node-type t2.xlarge --nodes 2 
-
-#To Delete EKS cluster
-eksctl delete cluster --region=us-west-2 --name=kubernetes-cluster #delete eks cluster
-```
-
-## Step 4: Cleanup Terraform Resources
-```
+# Destroy when done
 terraform destroy -var-file="vars/dev-west-2.tfvars"
-=======
-[![Build Status](https://travis-ci.org/k-tamura/easybuggy.svg?branch=master)](https://travis-ci.org/k-tamura/easybuggy)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![GitHub release](https://img.shields.io/github/release/k-tamura/easybuggy.svg)](https://github.com/k-tamura/easybuggy/releases/latest)
+```
 
-EasyBuggy Vulnerable Web App Modified by A Security Guru :baby_symbol:
-=
+---
 
-EasyBuggy is a broken web application in order to understand behavior of bugs and vulnerabilities, for example, [memory leak, deadlock, JVM crash, SQL injection and so on](https://github.com/k-tamura/easybuggy#clock4-easybuggy-can-reproduce).
+## ☸️ Kubernetes Deployment
 
-![logo](https://raw.githubusercontent.com/wiki/k-tamura/easybuggy/images/mov_eb.gif)
+`deployment.yaml` defines:
 
-:clock4: Quick Start
--
+- **Deployment** — 1 replica of the EasyBuggy app pulled from AWS ECR (`imagePullPolicy: Always`)
+- **Service** — `LoadBalancer` type, exposing port `80` → container port `8080`
+- **Namespace** — `devsecops`
 
-    $ mvn clean install
+```bash
+# Create the namespace
+kubectl create namespace devsecops
 
-( or ``` java -jar easybuggy.jar ``` or deploy ROOT.war on your servlet container with [the JVM options](https://github.com/k-tamura/easybuggy/blob/master/pom.xml#L204). )
+# Apply manifests
+kubectl apply -f deployment.yaml --namespace=devsecops
 
-Access to
+# Check deployment status
+kubectl get deployments --namespace=devsecops
 
-    http://localhost:8080
+# Get LoadBalancer URL
+kubectl get svc --namespace=devsecops
 
-:clock4: Quick Start(Docker)
--
+# Clean up
+kubectl delete all --all -n devsecops
+```
 
-    $ docker build . -t easybuggy:local # Build container image
-    $ docker run -p 8080:8080 easybuggy:local # Start easybuggy
+---
 
-Access to
+## 🔧 EKS Cluster Setup
 
-    http://localhost:8080
+```bash
+# Create cluster
+eksctl create cluster \
+  --name kubernetes-cluster-2 \
+  --version 1.23 \
+  --region us-east-1 \
+  --nodegroup-name linux-nodes \
+  --node-type t2.xlarge \
+  --nodes 2
 
-### To stop:
+# Update kubeconfig
+aws eks update-kubeconfig \
+  --name kubernetes-cluster-2 \
+  --region us-east-1
 
-  Use <kbd>CTRL</kbd>+<kbd>C</kbd> ( or access to: http://localhost:8080/exit )
+# Delete cluster when done
+eksctl delete cluster \
+  --region=us-east-1 \
+  --name=kubernetes-cluster-2
+```
 
-:clock4: For more detail
--
-   
-See [the wiki page](https://github.com/k-tamura/easybuggy/wiki).
+---
 
-:clock4: Demo
--
+## 📁 Project Structure
 
-This demo shows: Start up -> Infinite Loop -> LDAP Injection -> UnsatisfiedLinkError -> BufferOverflowException -> Deadlock -> Memory Leak -> JVM Crash (Shut down)
+```
+Devsecops/
+├── src/main/              # EasyBuggy Java application source
+├── vars/                  # Terraform variable files (tfvars)
+├── Dockerfile             # Container image definition
+├── Jenkinsfile            # 7-stage DevSecOps pipeline
+├── deployment.yaml        # Kubernetes Deployment + LoadBalancer Service
+├── main.tf                # Terraform: EC2, SG, IAM, AMI
+├── outputs.tf             # Terraform outputs
+├── install_jenkins.sh     # Jenkins auto-install user data script
+├── catalina.policy        # Tomcat security policy
+└── pom.xml                # Maven build + Snyk/Sonar plugin config
+```
 
-![demo](https://github.com/k-tamura/easybuggy/blob/master/demo_eb.gif)
+---
 
-:clock4: EasyBuggy can reproduce:
--
+## 🔒 Security Best Practices Used
 
-* Troubles
+- All secrets (SonarCloud token, Snyk token, AWS credentials, Docker login) stored in **Jenkins Credentials Store** — never hardcoded
+- Docker image pulled with `imagePullPolicy: Always` to ensure latest security patches
+- OWASP ZAP report archived per build for audit trail
+- IAM role attached to EC2 instead of using long-lived access keys on the server
+- Dedicated Kubernetes namespace (`devsecops`) for workload isolation
 
-  * Memory Leak (Java heap space)
-  * Memory Leak (PermGen space)
-  * Memory Leak (C heap space)
-  * Deadlock (Java)
-  * Deadlock (SQL)
-  * Endless Waiting Process
-  * Infinite Loop
-  * Redirect Loop
-  * Forward Loop
-  * JVM Crash
-  * Network Socket Leak
-  * Database Connection Leak
-  * File Descriptor Leak 
-  * Thread Leak 
-  * Mojibake
-  * Integer Overflow
-  * Round Off Error
-  * Truncation Error
-  * Loss of Trailing Digits
+---
 
-* Vulnerabilities
+## 🧹 Docker Maintenance
 
-  * XSS (Cross-Site Scripting)
-  * SQL Injection
-  * LDAP Injection
-  * Code Injection
-  * OS Command Injection (OGNL Expression Injection)
-  * Mail Header Injection
-  * Null Byte Injection
-  * Extension Unrestricted File Upload
-  * Size Unrestricted File Upload
-  * Open Redirect
-  * Brute-force Attack
-  * Session Fixation Attacks
-  * Verbose Login Error Messages
-  * Dangerous File Inclusion
-  * Directory Traversal
-  * Unintended File Disclosure
-  * CSRF (Cross-Site Request Forgery)
-  * XEE (XML Entity Expansion)
-  * XXE (XML eXternal Entity)
-  * Clickjacking
+```bash
+# Remove unused images to free disk space
+docker system prune
 
-* Performance Degradation
+# Remove a specific image
+docker image rm <imagename>
+```
 
-  * Slow Regular Expression Parsing
-  * Delay of creating string due to +(plus) operator
-  * Delay due to unnecessary object creation
+---
 
-* Errors
+## 👨‍💻 Author
 
-  * AssertionError
-  * ExceptionInInitializerError
-  * FactoryConfigurationError
-  * GenericSignatureFormatError
-  * NoClassDefFoundError
-  * OutOfMemoryError (Java heap space) 
-  * OutOfMemoryError (Requested array size exceeds VM limit)
-  * OutOfMemoryError (unable to create new native thread)
-  * OutOfMemoryError (GC overhead limit exceeded)
-  * OutOfMemoryError (PermGen space)
-  * OutOfMemoryError (Direct buffer memory)
-  * StackOverflowError
-  * TransformerFactoryConfigurationError
-  * UnsatisfiedLinkError
+**Sandip** — Aspiring DevOps / DevSecOps Engineer  
+Transitioning from IT Admin & Network Support to Cloud & DevOps  
+📍 Hyderabad, India
 
-:clock4: EasyBuggy clones:
--
-* [EasyBuggy Boot](https://github.com/k-tamura/easybuggy4sb)
+[![GitHub](https://img.shields.io/badge/GitHub-sforsandip-181717?logo=github)](https://github.com/sforsandip)
 
-  EasyBuggy clone build on Spring Boot
+---
 
-  ![logo](https://raw.githubusercontent.com/wiki/k-tamura/easybuggy/images/mov_ebsb.gif)
+## 📌 Topics
 
-* [EasyBuggy Bootlin](https://github.com/k-tamura/easybuggy4kt)
-
-  EasyBuggy clone build on Spring Boot and written in Kotlin
-
-  ![logo](https://raw.githubusercontent.com/wiki/k-tamura/easybuggy/images/mov_ebkt.gif)
-
-* [EasyBuggy Django](https://github.com/k-tamura/easybuggy4django)
-
-  EasyBuggy clone build on Django 2 and written in Python
-
-  　![logo](https://github.com/k-tamura/easybuggy4django/blob/master/static/easybuggy.png)
->>>>>>> fc97e7a24150cf445238a37a529e565a0c9bd7fb
+`devsecops` `jenkins` `docker` `kubernetes` `terraform` `aws` `eks` `ecr` `sonarqube` `snyk` `owasp-zap` `sast` `dast` `sca` `ci-cd` `java` `maven` `security-automation`
